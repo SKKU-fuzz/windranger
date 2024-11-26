@@ -2,7 +2,7 @@
 https://sites.google.com/view/windranger-directed-fuzzing
 
 ## Dependencies
-* llvm 16 ([https://github.com/llvm/llvm-project#ae42196bc493ffe877a7e3dff8be32035dea4d07](https://github.com/llvm/llvm-project/tree/llvmorg-16.0.4))
+* llvm 16 (https://github.com/llvm/llvm-project/tree/llvmorg-16.0.4)
 * SVF (https://github.com/SVF-tools/SVF) build with llvm 16
 * rustc release 1.70.0
   
@@ -27,7 +27,7 @@ https://sites.google.com/view/windranger-directed-fuzzing
 
 * clean up
 ``` shell
-# kill active process
+# kill active processes
 ./kill.sh
 
 # clean up artifacts
