@@ -7,3 +7,5 @@ targets.txt
 *.bc
 
 in/
+out/
+sync_dir/
