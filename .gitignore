@@ -5,3 +5,5 @@ functions.txt
 targets.txt
 *.ci
 *.bc
+
+in/
