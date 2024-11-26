@@ -372,14 +372,14 @@ void instrument() {
        			llvm::IRBuilder<> IRB(&(*IP));
 
 				/* Load SHM pointer */
-				LoadInst *MapPtr = IRB.CreateLoad(AFLMapPtr->getType(), AFLMapPtr);
+				LoadInst *MapPtr = IRB.CreateLoad(PointerType::get(Int8Ty, 0), AFLMapPtr);
 				MapPtr->setMetadata(M->getMDKindID("nosanitize"), MDNode::get(*C, std::nullopt));
 
 				/* Add distance to shm[MAPSIZE] */
 
 				Value *MapDistPtr = IRB.CreateBitCast(
-					IRB.CreateGEP(MapPtr->getType(), MapPtr, MapDistLoc), LargestType->getPointerTo());
-				LoadInst *MapDist = IRB.CreateLoad(MapDistPtr->getType(), MapDistPtr);
+					IRB.CreateGEP(Int8Ty, MapPtr, MapDistLoc), LargestType->getPointerTo());
+				LoadInst *MapDist = IRB.CreateLoad(LargestType, MapDistPtr);
 				MapDist->setMetadata(M->getMDKindID("nosanitize"), MDNode::get(*C, std::nullopt));
 
 				Value *IncrDist = IRB.CreateAdd(MapDist, Distance);
@@ -389,8 +389,8 @@ void instrument() {
 				/* Increase count at shm[MAPSIZE + (4 or 8)] */
 
 				Value *MapCntPtr = IRB.CreateBitCast(
-					IRB.CreateGEP(MapPtr->getType(), MapPtr, MapCntLoc), LargestType->getPointerTo());
-				LoadInst *MapCnt = IRB.CreateLoad(MapCntPtr->getType(), MapCntPtr);
+					IRB.CreateGEP(Int8Ty, MapPtr, MapCntLoc), LargestType->getPointerTo());
+				LoadInst *MapCnt = IRB.CreateLoad(LargestType, MapCntPtr);
 				MapCnt->setMetadata(M->getMDKindID("nosanitize"), MDNode::get(*C, std::nullopt));
 
 				Value *IncrCnt = IRB.CreateAdd(MapCnt, One);
@@ -399,7 +399,7 @@ void instrument() {
 
 				if (distance == 0) {
 					ConstantInt *TFlagLoc = ConstantInt::get(LargestType, MAP_SIZE + 16 + target_id);
-					Value* TFlagPtr = IRB.CreateGEP(MapPtr->getType(), MapPtr, TFlagLoc);
+					Value* TFlagPtr = IRB.CreateGEP(Int8Ty, MapPtr, TFlagLoc);
 					ConstantInt *FlagOne = ConstantInt::get(Int8Ty, 1);
 					IRB.CreateStore(FlagOne, TFlagPtr)
 						->setMetadata(M->getMDKindID("nosanitize"), MDNode::get(*C, std::nullopt));
@@ -412,12 +412,12 @@ void instrument() {
 						BasicBlock::iterator IP2 = cbb->getFirstInsertionPt();
 						llvm::IRBuilder<> IRB2(&(*IP2));
 
-						LoadInst *CBPtr = IRB2.CreateLoad(CBMapPtr->getType(), CBMapPtr);
+						LoadInst *CBPtr = IRB2.CreateLoad(PointerType::get(Int8Ty, 0), CBMapPtr);
 						CBPtr->setMetadata(M->getMDKindID("nosanitize"), MDNode::get(*C, std::nullopt));
 
 						ConstantInt *CBIdx = ConstantInt::get(Int32Ty, bb_id);
 						ConstantInt *CBOne = ConstantInt::get(Int8Ty, 1);
-						Value* CBIdxPtr = IRB2.CreateGEP(CBPtr->getType(),CBPtr,CBIdx);
+						Value* CBIdxPtr = IRB2.CreateGEP(Int8Ty,CBPtr,CBIdx);
 						IRB2.CreateStore(CBOne, CBIdxPtr)
 							->setMetadata(M->getMDKindID("nosanitize"), MDNode::get(*C, std::nullopt));
 						c_instrument_num++;
@@ -430,12 +430,12 @@ void instrument() {
 						BasicBlock::iterator IP2 = sbb->getFirstInsertionPt();
 						llvm::IRBuilder<> IRB2(&(*IP2));
 
-						LoadInst *CBPtr = IRB2.CreateLoad(CBMapPtr->getType(), CBMapPtr);
+						LoadInst *CBPtr = IRB2.CreateLoad(PointerType::get(Int8Ty, 0), CBMapPtr);
 						CBPtr->setMetadata(M->getMDKindID("nosanitize"), MDNode::get(*C, std::nullopt));
 
 						ConstantInt *CBIdx = ConstantInt::get(Int32Ty, bb_id);
 						ConstantInt *CBOne = ConstantInt::get(Int8Ty, 2);
-						Value* CBIdxPtr = IRB2.CreateGEP(CBPtr->getType(), CBPtr,CBIdx);
+						Value* CBIdxPtr = IRB2.CreateGEP(Int8Ty,CBPtr,CBIdx);
 						IRB2.CreateStore(CBOne, CBIdxPtr)
 							->setMetadata(M->getMDKindID("nosanitize"), MDNode::get(*C, std::nullopt));
 					}
@@ -586,16 +586,18 @@ void instrumentBB(llvm::BasicBlock* bb, llvm::Value* var, uint8_t idx) {
 	Instruction* term_inst = dyn_cast<Instruction>(bb->getTerminator());
 	if (term_inst == nullptr)
 		return;
+    IntegerType *Int64Ty  = IntegerType::getInt64Ty(*C);
+	IntegerType *Int8Ty  = IntegerType::getInt8Ty(*C);
     llvm::IRBuilder<> IRB(term_inst);
 	auto *branch  = dyn_cast<BranchInst>(term_inst);
 	Value* branch_val = IRB.CreateZExt( branch->getCondition(),IRB.getInt8Ty());
-	llvm::LoadInst* c_map_ptr = IRB.CreateLoad(cond_map_ptr->getType(), cond_map_ptr);
-	llvm::Value* cond_map_ptr_idx = IRB.CreateGEP(c_map_ptr->getType(), c_map_ptr,ConstantInt::get(IntegerType::getInt32Ty(*C), condition_ids[bb]));
+	llvm::LoadInst* c_map_ptr = IRB.CreateLoad(PointerType::get(Int8Ty, 0), cond_map_ptr);
+	llvm::Value* cond_map_ptr_idx = IRB.CreateGEP(Int8Ty, c_map_ptr,ConstantInt::get(IntegerType::getInt32Ty(*C), condition_ids[bb]));
 	branch_val = IRB.CreateAdd(branch_val,ConstantInt::get(IntegerType::getInt8Ty(*C),1));
 	IRB.CreateStore(branch_val,cond_map_ptr_idx);
-    llvm::LoadInst* map_ptr = IRB.CreateLoad(cvar_map_ptr->getType(), cvar_map_ptr);
+    llvm::LoadInst* map_ptr = IRB.CreateLoad(PointerType::get(Int64Ty, 0), cvar_map_ptr);
 	ConstantInt* cur_id = llvm::ConstantInt::get(IntegerType::getInt32Ty(*C), 2*condition_ids[bb] + idx);
-    llvm::Value* map_ptr_idx = IRB.CreateGEP(map_ptr->getType(), map_ptr,cur_id);
+    llvm::Value* map_ptr_idx = IRB.CreateGEP(Int64Ty, map_ptr,cur_id);
     Value* var_64 = IRB.CreateIntCast(var, IntegerType::getInt64Ty(*C), true);
     IRB.CreateStore(var_64, map_ptr_idx);
     cond_instrument_num++;
@@ -606,20 +608,22 @@ void instrumentString(llvm::BasicBlock* bb, llvm::Value* var) {
 	Instruction* term_inst = dyn_cast<Instruction>(bb->getTerminator());
 	if (term_inst == nullptr)
 		return;
+    IntegerType *Int64Ty  = IntegerType::getInt64Ty(*C);
+	IntegerType *Int8Ty  = IntegerType::getInt8Ty(*C);
     llvm::IRBuilder<> IRB(term_inst);
 	auto *branch  = dyn_cast<BranchInst>(term_inst);
 	Value* branch_val = IRB.CreateZExt(branch->getCondition(),IRB.getInt8Ty());
-	llvm::LoadInst* c_map_ptr = IRB.CreateLoad(cond_map_ptr->getType(), cond_map_ptr);
-	llvm::Value* cond_map_ptr_idx = IRB.CreateGEP(c_map_ptr->getType(),c_map_ptr,ConstantInt::get(IntegerType::getInt32Ty(*C), condition_ids[bb]));
+	llvm::LoadInst* c_map_ptr = IRB.CreateLoad(PointerType::get(Int8Ty, 0), cond_map_ptr);
+	llvm::Value* cond_map_ptr_idx = IRB.CreateGEP(Int8Ty,c_map_ptr,ConstantInt::get(IntegerType::getInt32Ty(*C), condition_ids[bb]));
 	branch_val = IRB.CreateAdd(branch_val,ConstantInt::get(IntegerType::getInt8Ty(*C),1));
 	IRB.CreateStore(branch_val,cond_map_ptr_idx);
 
     //llvm::IRBuilder<> IRB(I);
-    llvm::LoadInst* map_ptr = IRB.CreateLoad(cvar_map_ptr->getType(), cvar_map_ptr);
+    llvm::LoadInst* map_ptr = IRB.CreateLoad(PointerType::get(Int64Ty, 0), cvar_map_ptr);
     ConstantInt* cur_id = llvm::ConstantInt::get(IntegerType::getInt32Ty(*C), 2*condition_ids[bb]);
-    llvm::Value* map_ptr_idx = IRB.CreateGEP(map_ptr->getType(),map_ptr,cur_id);
+    llvm::Value* map_ptr_idx = IRB.CreateGEP(Int64Ty,map_ptr,cur_id);
     llvm::Value* ptr_64 = IRB.CreatePointerCast(var,PointerType::get(IntegerType::getInt64Ty(*C),0));
-    llvm::Value* var_64 = IRB.CreateLoad(ptr_64->getType(), ptr_64);
+    llvm::Value* var_64 = IRB.CreateLoad(Int64Ty, ptr_64);
     IRB.CreateStore(var_64, map_ptr_idx);
     cond_instrument_num++;
 }

@@ -126,6 +126,7 @@ static void edit_params(u32 argc, char** argv) {
 
      http://clang.llvm.org/docs/SanitizerCoverage.html#tracing-pcs-with-guards */
 
+#if 0
 #ifdef USE_TRACE_PC
   cc_params[cc_par_cnt++] = "-fsanitize-coverage=trace-pc-guard";
   cc_params[cc_par_cnt++] = "-mllvm";
@@ -136,6 +137,9 @@ static void edit_params(u32 argc, char** argv) {
   cc_params[cc_par_cnt++] = "-Xclang";
   cc_params[cc_par_cnt++] = alloc_printf("%s/afl-llvm-pass.so", obj_path);
 #endif /* ^USE_TRACE_PC */
+#else
+  cc_params[cc_par_cnt++] = alloc_printf("-fpass-plugin=%s/afl-llvm-pass.so", obj_path);
+#endif
 
   cc_params[cc_par_cnt++] = "-Qunused-arguments";
 
@@ -356,6 +360,11 @@ int main(int argc, char** argv) {
 
   edit_params(argc, argv);
 
+  /* debugging purpose
+  for (int i = 0; i < cc_par_cnt; i++) {
+      printf("%d: %s\n", i, cc_params[i]);
+  }
+  */
   execvp(cc_params[0], (char**)cc_params);
 
   FATAL("Oops, failed to execute '%s' - check your PATH", cc_params[0]);

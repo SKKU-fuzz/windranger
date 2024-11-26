@@ -38,29 +38,44 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "llvm/Pass.h"
+
 #include "llvm/ADT/Statistic.h"
 #include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/LegacyPassManager.h"
+// #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
-#include "llvm/Pass.h"
-#include "llvm/Passes/PassBuilder.h"
+
 #include "llvm/Passes/PassPlugin.h"
+#include "llvm/Passes/PassBuilder.h"
 #include "llvm/IR/PassManager.h"
+#include "llvm/Passes/OptimizationLevel.h"
 
 using namespace llvm;
 
-Module* M2;
-
 namespace {
 
-class AFLCoverage : public PassInfoMixin<AFLCoverage> {
-public:
-  PreservedAnalyses run(Module &M, ModuleAnalysisManager &);
-};
+  class AFLCoverage : public PassInfoMixin<AFLCoverage> {
 
-PreservedAnalyses AFLCoverage::run(Module &M, ModuleAnalysisManager &) {
+    public:
+      AFLCoverage() {
+      }
+
+      PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
+
+      // StringRef getPassName() const override {
+      //  return "American Fuzzy Lop Instrumentation";
+      // }
+
+  };
+
+}
+
+Module* M2;
+
+PreservedAnalyses AFLCoverage::run(Module &M, ModuleAnalysisManager &MAM) {
+
   LLVMContext &C = M.getContext();
 
   M2 = &M;
@@ -94,7 +109,10 @@ PreservedAnalyses AFLCoverage::run(Module &M, ModuleAnalysisManager &) {
   /* Get globals for the SHM region and the previous location. Note that
      __afl_prev_loc is thread-local. */
   
-  GlobalVariable *AFLMapPtr = dyn_cast<GlobalVariable>(M.getOrInsertGlobal("__afl_area_ptr", PointerType::get(Int8Ty, 0)));
+	GlobalVariable *AFLMapPtr = (GlobalVariable*)M.getOrInsertGlobal("__afl_area_ptr",PointerType::get(Int8Ty, 0),[]() -> GlobalVariable* {
+      return new GlobalVariable(*M2, PointerType::get(IntegerType::getInt8Ty(M2->getContext()), 0), false,
+                         GlobalValue::ExternalLinkage, 0, "__afl_area_ptr");
+  });
 
   GlobalVariable *AFLPrevLoc = new GlobalVariable(
       M, Int32Ty, false, GlobalValue::ExternalLinkage, 0, "__afl_prev_loc",
@@ -104,7 +122,7 @@ PreservedAnalyses AFLCoverage::run(Module &M, ModuleAnalysisManager &) {
 
   int inst_blocks = 0;
 
-  for (auto &F : M)
+  for (auto &F : M) {
     for (auto &BB : F) {
 
       BasicBlock::iterator IP = BB.getFirstInsertionPt();
@@ -120,20 +138,20 @@ PreservedAnalyses AFLCoverage::run(Module &M, ModuleAnalysisManager &) {
 
       /* Load prev_loc */
 
-      LoadInst *PrevLoc = IRB.CreateLoad(AFLPrevLoc->getType(), AFLPrevLoc);
+      LoadInst *PrevLoc = IRB.CreateLoad(Int32Ty, AFLPrevLoc);
       PrevLoc->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, std::nullopt));
       Value *PrevLocCasted = IRB.CreateZExt(PrevLoc, IRB.getInt32Ty());
 
       /* Load SHM pointer */
 
-      LoadInst *MapPtr = IRB.CreateLoad(AFLMapPtr->getType(), AFLMapPtr);
+      LoadInst *MapPtr = IRB.CreateLoad(PointerType::get(Int8Ty, 0), AFLMapPtr);
       MapPtr->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, std::nullopt));
       Value *MapPtrIdx =
-          IRB.CreateGEP(MapPtr->getType(), MapPtr, IRB.CreateXor(PrevLocCasted, CurLoc));
+          IRB.CreateGEP(Int8Ty, MapPtr, IRB.CreateXor(PrevLocCasted, CurLoc));
 
       /* Update bitmap */
 
-      LoadInst *Counter = IRB.CreateLoad(MapPtrIdx->getType(), MapPtrIdx);
+      LoadInst *Counter = IRB.CreateLoad(Int8Ty, MapPtrIdx);
       Counter->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, std::nullopt));
       Value *Incr = IRB.CreateAdd(Counter, ConstantInt::get(Int8Ty, 1));
       IRB.CreateStore(Incr, MapPtrIdx)
@@ -148,6 +166,7 @@ PreservedAnalyses AFLCoverage::run(Module &M, ModuleAnalysisManager &) {
       inst_blocks++;
 
     }
+  }
 
   /* Say something nice. */
 
@@ -162,21 +181,16 @@ PreservedAnalyses AFLCoverage::run(Module &M, ModuleAnalysisManager &) {
   }
 
   return PreservedAnalyses::all();
-}
 
 }
 
-extern "C" LLVM_ATTRIBUTE_WEAK ::llvm::PassPluginLibraryInfo llvmGetPassPluginInfo() {
-  return {LLVM_PLUGIN_API_VERSION, "AFLCoverage", LLVM_VERSION_STRING,
-          [](PassBuilder &PB) {
-            PB.registerPipelineParsingCallback(
-                [](StringRef Name, ModulePassManager &MPM,
-                   ArrayRef<PassBuilder::PipelineElement>) {
-                  if (Name == "afl-coverage") {
-                    MPM.addPass(AFLCoverage());
-                    return true;
-                  }
-                  return false;
-                });
-          }};
+extern "C" ::llvm::PassPluginLibraryInfo LLVM_ATTRIBUTE_WEAK
+llvmGetPassPluginInfo() {
+  return {LLVM_PLUGIN_API_VERSION, "AFLCoverage", "v0.1",
+    [](PassBuilder &PB) {
+      PB.registerOptimizerEarlyEPCallback(
+          [](ModulePassManager& MPM, OptimizationLevel OL) {
+            MPM.addPass(AFLCoverage());
+          });
+    }};
 }

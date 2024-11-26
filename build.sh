@@ -8,9 +8,7 @@ fi
 TARGET_SRC=$1
 TARGET_NAME=$(basename "$TARGET_SRC" .rs)
 
-export LD_LIBRARY_PATH=/root/.rustup/toolchains/1.70-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/lib:$LD_LIBRARY_PATH
-
-rustc --emit=llvm-bc $TARGET_SRC
+rustc --emit=llvm-bc $TARGET_SRC -g
 
 ./cbi ${TARGET_NAME}.bc
 
