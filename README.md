@@ -1,9 +1,9 @@
 # Windranger fuzzer compatible with llvm 16
-https://sites.google.com/view/windranger-directed-fuzzing
+This is a modified version of the [Windranger fuzzer(ICSE '22)](https://sites.google.com/view/windranger-directed-fuzzing). It has been adapted to be used with LLVM version 16 for compatibility with Rust projects.
 
 ## Dependencies
 * llvm 16 (https://github.com/llvm/llvm-project/tree/llvmorg-16.0.4)
-* SVF (https://github.com/SVF-tools/SVF) build with llvm 16
+* SVF 3.0 (https://github.com/SVF-tools/SVF) build with llvm 16
 * rustc release 1.70.0
   
 ## Usage
